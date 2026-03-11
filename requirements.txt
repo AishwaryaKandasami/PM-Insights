@@ -1,0 +1,12 @@
+streamlit
+pandas
+langdetect
+presidio-anonymizer
+presidio-analyzer
+python-dotenv
+google-generativeai
+scikit-learn
+numpy
+google-play-scraper
+python-dateutil
+

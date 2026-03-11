@@ -1,0 +1,60 @@
+CREATE TABLE IF NOT EXISTS raw_reviews (
+    review_id TEXT PRIMARY KEY,
+    source_file TEXT,
+    source_type TEXT,
+    app_id TEXT,
+    raw_text TEXT NOT NULL,
+    rating INTEGER,
+    date TEXT,
+    app_version TEXT,
+    device TEXT,
+    locale TEXT,
+    thumbs_up INTEGER,
+    ingested_at TEXT,
+    run_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS reviews_normalized (
+    review_id TEXT PRIMARY KEY,
+    original_text TEXT,
+    cleaned_text TEXT NOT NULL,
+    detected_language TEXT,
+    is_supported BOOLEAN,
+    is_duplicate BOOLEAN,
+    is_low_quality BOOLEAN,
+    pii_masked BOOLEAN,
+    word_count INTEGER,
+    char_count INTEGER,
+    normalized_at TEXT,
+    run_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS pipeline_runs (
+    run_id TEXT PRIMARY KEY,
+    status TEXT,
+    source_type TEXT,
+    source_file TEXT,
+    app_id TEXT,
+    total_reviews INTEGER,
+    supported_reviews INTEGER,
+    duplicate_count INTEGER,
+    low_quality_count INTEGER,
+    current_step TEXT,
+    error_message TEXT,
+    started_at TEXT,
+    completed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS scrape_log (
+    scrape_id TEXT PRIMARY KEY,
+    app_id TEXT,
+    total_scraped INTEGER,
+    date_range_start TEXT,
+    date_range_end TEXT,
+    cutoff_date TEXT,
+    stop_reason TEXT,
+    output_file TEXT,
+    duration_seconds REAL,
+    scraped_at TEXT
+);
+
