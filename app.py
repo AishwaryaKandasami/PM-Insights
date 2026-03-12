@@ -10,7 +10,7 @@ from config.settings import RAW_DATA_PATH
 from database.db import get_pipeline_run, init_db
 from pipeline.ingestion import ValidationError, load_and_validate
 from pipeline.normalization import normalize_reviews
-from pipeline.extraction_agent import run_extraction
+from agent.orchestrator import run_extraction
 from pipeline.scraper import ScraperError, scrape_reviews, set_progress_callback
 
 

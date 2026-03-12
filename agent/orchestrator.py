@@ -1,12 +1,9 @@
 """
-Extraction Agent — Phase 2
-Orchestrates the full extraction loop over a sample of usable reviews.
+Orchestrator — Phase 2
+The agent loop: routes each review, selects the right extractor tool,
+writes atoms to the Gold layer (review_atoms table).
 
-The agent (not a script) decides per review which extractor tool to call:
-  router → bug       → bug_extractor.extract_bugs()
-  router → feature   → feature_extractor.extract_features()
-  router → ambiguous → multi_extractor.extract_all()
-  router → noise     → skip
+The agent decides per review which tool to call — no hardcoded step order.
 """
 import logging
 from datetime import datetime, timezone
@@ -14,15 +11,15 @@ from typing import Optional
 
 from database.db import (
     fetch_usable_normalized,
+    get_pipeline_run,
     init_db,
     insert_review_atoms,
     upsert_pipeline_run,
-    get_pipeline_run,
 )
-from pipeline.extractors.bug_extractor import extract_bugs
-from pipeline.extractors.feature_extractor import extract_features
-from pipeline.extractors.multi_extractor import extract_all
-from pipeline.router import route_review
+from agent.tools.router import route_review
+from agent.tools.bug_extractor import extract_bugs
+from agent.tools.feature_extractor import extract_features
+from agent.tools.multi_extractor import extract_all
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +78,7 @@ def run_extraction(run_id: str, sample_limit: Optional[int] = DEFAULT_SAMPLE_LIM
             review_id, intent, router_confidence,
         )
 
-        # ── Step 2: Agent selects and calls extractor tool ───────────────
+        # ── Step 2: Agent selects and calls the right extractor tool ─────
         if intent == "noise":
             counters["skipped_noise"] += 1
             continue
