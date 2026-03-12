@@ -103,16 +103,27 @@ def normalize_reviews(run_id: str) -> Dict:
         original_text = row["raw_text"] or ""
         cleaned = _clean_text(original_text)
 
-        lang = _detect_language(cleaned or original_text or "")
+        masked_text, has_pii = _mask_pii(cleaned)
+        if has_pii:
+            pii_masked_count += 1
+
+        words = masked_text.split()
+        word_count = len(words)
+        char_count = len(masked_text)
+        is_low_quality = word_count < 3
+
+        # Skip langdetect for very short reviews — insufficient signal causes
+        # misclassification of common English words as other languages.
+        # Strings under 5 words are assumed to be English.
+        if word_count < 5:
+            lang = "en"
+        else:
+            lang = _detect_language(masked_text or original_text or "")
         is_supported = lang == "en"
         if is_supported:
             supported_count += 1
         else:
             unsupported_count += 1
-
-        masked_text, has_pii = _mask_pii(cleaned)
-        if has_pii:
-            pii_masked_count += 1
 
         # Duplicate detection using the same strategy as ingestion
         date_str = row["date"] or ""
@@ -124,11 +135,6 @@ def normalize_reviews(run_id: str) -> Dict:
         else:
             seen_ids.add(review_id)
             seen_text_date.add(key)
-
-        words = masked_text.split()
-        word_count = len(words)
-        char_count = len(masked_text)
-        is_low_quality = word_count < 3
         if is_low_quality:
             low_quality_count += 1
 
