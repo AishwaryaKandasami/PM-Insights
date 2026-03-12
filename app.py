@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 
 from config.settings import RAW_DATA_PATH
-from database.db import get_pipeline_run, init_db
+from database.db import get_pipeline_run, init_db, fetch_recent_runs
 from pipeline.ingestion import ValidationError, load_and_validate
 from pipeline.normalization import normalize_reviews
 from agent.orchestrator import run_extraction
@@ -53,6 +53,22 @@ def main() -> None:
         st.session_state.current_run_id = None
     if "current_source_file" not in st.session_state:
         st.session_state.current_source_file = None
+
+    # ── Resume an existing run from the DB ──────────────────────────────
+    with st.expander("📂 Resume existing run (Phase 1 already done?)", expanded=st.session_state.current_run_id is None):
+        recent_runs = fetch_recent_runs(limit=10)
+        if recent_runs:
+            run_options = {
+                f"{r['run_id'][:8]}…  |  {r['status']}  |  {r['started_at'][:16]}  |  {r['supported_reviews'] or '?'} usable reviews": r['run_id']
+                for r in recent_runs
+            }
+            selected_label = st.selectbox("Select a previous run:", list(run_options.keys()))
+            if st.button("Load this run", key="btn_load_run"):
+                st.session_state.current_run_id = run_options[selected_label]
+                st.success(f"Run loaded: `{st.session_state.current_run_id}`")
+                st.rerun()
+        else:
+            st.info("No previous runs found. Scrape or upload data first.")
 
     tab_scrape, tab_upload = st.tabs(["Scrape Reviews", "Upload CSV"])
 

@@ -287,3 +287,20 @@ def fetch_review_atoms(run_id: str) -> List[sqlite3.Row]:
             (run_id,),
         )
         return cur.fetchall()
+
+
+def fetch_recent_runs(limit: int = 10) -> list:
+    """Return recent pipeline runs ordered by start time descending."""
+    with get_connection() as conn:
+        cur = conn.execute(
+            """
+            SELECT run_id, status, current_step, total_reviews,
+                   supported_reviews, started_at
+            FROM pipeline_runs
+            ORDER BY started_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        return cur.fetchall()
+
