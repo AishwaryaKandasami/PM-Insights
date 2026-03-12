@@ -10,6 +10,7 @@ from config.settings import RAW_DATA_PATH
 from database.db import get_pipeline_run, init_db
 from pipeline.ingestion import ValidationError, load_and_validate
 from pipeline.normalization import normalize_reviews
+from pipeline.extraction_agent import run_extraction
 from pipeline.scraper import ScraperError, scrape_reviews, set_progress_callback
 
 
@@ -42,8 +43,8 @@ def _rating_distribution_chart(df: pd.DataFrame) -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title="PM Insights Engine — Phase 1", layout="wide")
-    st.title("PM Insights Engine — Phase 1")
+    st.set_page_config(page_title="PM Insights Engine", layout="wide")
+    st.title("PM Insights Engine")
 
     _ensure_dirs()
     init_db()
@@ -190,7 +191,7 @@ def main() -> None:
         st.info("No data loaded yet. Scrape or upload a CSV to preview.")
 
     st.markdown("---")
-    st.subheader("Prepare Reviews")
+    st.subheader("Phase 1 — Prepare Reviews")
     if st.button("Clean and Prepare Reviews", disabled=st.session_state.current_run_id is None):
         if st.session_state.current_run_id is None:
             st.error("No run_id available. Please scrape or upload data first.")
@@ -201,6 +202,32 @@ def main() -> None:
             st.write("Normalization summary:", summary)
 
     st.markdown("---")
+    st.subheader("Phase 2 — AI Extraction (50-review sample)")
+    st.caption(
+        "Agent routes each review (bug / feature / ambiguous / noise) then "
+        "calls the matching extractor. Writes atoms to Gold layer."
+    )
+    if st.button(
+        "▶ Run AI Extraction (50-review sample)",
+        disabled=st.session_state.current_run_id is None,
+        key="btn_phase2",
+    ):
+        run_id_p2 = st.session_state.current_run_id
+        with st.spinner("Agent running… routing + extracting (≈50 Gemini calls, ~5-10 min)..."):
+            try:
+                result = run_extraction(run_id_p2, sample_limit=50)
+                st.success(f"Extraction complete — {result['atoms_written']} atoms written to DB.")
+                st.table([
+                    {"Route": "Bug",       "Count": result["routed_bug"]},
+                    {"Route": "Feature",   "Count": result["routed_feature"]},
+                    {"Route": "Ambiguous", "Count": result["routed_ambiguous"]},
+                    {"Route": "Noise (skipped)", "Count": result["skipped_noise"]},
+                    {"Route": "Total reviewed",  "Count": result["total_reviewed"]},
+                ])
+            except Exception as exc:
+                st.error(f"Extraction failed: {exc}")
+
+    st.markdown("---")
     st.subheader("Pipeline Status")
     run_id = st.session_state.current_run_id
     if run_id:
@@ -209,7 +236,6 @@ def main() -> None:
         if run_row:
             st.write("Status:", run_row["status"])
             st.write("Current step:", run_row["current_step"])
-        st.info("Phase 1 Complete — Ready for AI Analysis in Phase 2 (once implemented).")
     else:
         st.write("No active run yet.")
 

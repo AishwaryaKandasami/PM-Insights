@@ -211,3 +211,79 @@ def get_pipeline_run(run_id: str) -> Optional[sqlite3.Row]:
         )
         return cur.fetchone()
 
+
+def fetch_usable_normalized(run_id: str, limit: Optional[int] = None) -> List[sqlite3.Row]:
+    """
+    Fetch normalized reviews that are usable for Phase 2 extraction:
+    supported English, not low quality, not duplicates.
+    """
+    sql = """
+        SELECT review_id, cleaned_text
+        FROM reviews_normalized
+        WHERE run_id = ?
+          AND is_supported = 1
+          AND is_low_quality = 0
+          AND is_duplicate = 0
+        ORDER BY review_id
+    """
+    params: list = [run_id]
+    if limit is not None:
+        sql += " LIMIT ?"
+        params.append(limit)
+    with get_connection() as conn:
+        cur = conn.execute(sql, params)
+        return cur.fetchall()
+
+
+def insert_review_atoms(rows: Iterable[Dict[str, Any]]) -> None:
+    """Bulk insert extracted atoms into the review_atoms Gold layer table."""
+    with get_connection() as conn:
+        conn.executemany(
+            """
+            INSERT INTO review_atoms (
+                review_id,
+                atom_type,
+                title,
+                description,
+                evidence_spans,
+                product_area,
+                severity_signal,
+                user_value,
+                confidence_score,
+                routed_as,
+                router_confidence,
+                run_id,
+                extracted_at
+            ) VALUES (
+                :review_id,
+                :atom_type,
+                :title,
+                :description,
+                :evidence_spans,
+                :product_area,
+                :severity_signal,
+                :user_value,
+                :confidence_score,
+                :routed_as,
+                :router_confidence,
+                :run_id,
+                :extracted_at
+            )
+            """,
+            list(rows),
+        )
+        conn.commit()
+
+
+def fetch_review_atoms(run_id: str) -> List[sqlite3.Row]:
+    """Fetch all extracted atoms for a given run (for verification)."""
+    with get_connection() as conn:
+        cur = conn.execute(
+            """
+            SELECT * FROM review_atoms
+            WHERE run_id = ?
+            ORDER BY atom_type, extracted_at
+            """,
+            (run_id,),
+        )
+        return cur.fetchall()

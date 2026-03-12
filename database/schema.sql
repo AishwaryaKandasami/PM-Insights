@@ -58,3 +58,27 @@ CREATE TABLE IF NOT EXISTS scrape_log (
     scraped_at TEXT
 );
 
+-- Gold Layer: atomic extracted items from Phase 2
+CREATE TABLE IF NOT EXISTS review_atoms (
+    atom_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    review_id TEXT NOT NULL,          -- FK to reviews_normalized
+    atom_type TEXT NOT NULL,          -- 'bug' | 'feature'
+    title TEXT NOT NULL,
+    description TEXT,
+    evidence_spans TEXT,              -- JSON array of quote strings
+    product_area TEXT,
+    severity_signal TEXT,             -- bug only: 'P0' | 'P1' | 'P2' | 'P3'
+    user_value TEXT,                  -- feature only: user value statement
+    confidence_score REAL,            -- extractor confidence 0.0-1.0
+    routed_as TEXT NOT NULL,          -- router decision: 'bug' | 'feature' | 'ambiguous'
+    router_confidence REAL,           -- router confidence 0.0-1.0
+    run_id TEXT NOT NULL,
+    extracted_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_review_atoms_run_id
+    ON review_atoms (run_id);
+
+CREATE INDEX IF NOT EXISTS idx_review_atoms_review_id
+    ON review_atoms (review_id);
+
