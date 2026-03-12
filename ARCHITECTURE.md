@@ -1,19 +1,26 @@
 # PM Insights Engine — Architecture
 
-AI-powered feedback analysis engine that 
-converts raw Spotify Google Play reviews 
-(10,000 reviews) into four structured, 
-PM-ready artifacts without manual tagging.
+AI agent system that converts raw Spotify 
+Google Play reviews (10,000 reviews) into 
+four structured, PM-ready artifacts —
+without manual tagging, without a fixed 
+pipeline. An agent decides what to do;
+MCP delivers it to where PMs work.
 
 ---
 
 ## 1. Project Overview
 
-PM Insights Engine is a self-evaluating,
-incrementally-updating feedback intelligence
-system that routes, analyzes, and delivers
-PM-ready insights with confidence scoring —
-powered by Gemini AI and delivered via MCP.
+PM Insights Engine is an AI agent system —
+not a fixed pipeline. A Gemini-powered 
+agent dynamically orchestrates tools 
+(routing, extraction, clustering, scoring,
+adjudication) based on review signals and 
+confidence levels at runtime.
+
+Artifacts are not emailed or exported —
+they are delivered via MCP directly into 
+the tools PMs already use (Notion, Jira).
 
 Target user: PM at a growth-stage consumer 
 app (Series B-C, 50K-500K MAUs) with no 
@@ -40,6 +47,12 @@ reviews (Feb 21 – Mar 07, 2026)
 
 ## 3. Key Design Principles
 
+- Agent-orchestrated, not pipeline-scripted
+  (agent decides routing and tool calls 
+  at runtime — no hardcoded step order)
+- MCP-first delivery
+  (artifacts land in Notion/Jira via MCP,
+  not file exports or email)
 - No manual labeling required
 - Deterministic where possible
   (temperature=0, pinned prompt versions)
@@ -58,10 +71,14 @@ reviews (Feb 21 – Mar 07, 2026)
 - English-only review processing
 - Manual trigger via Streamlit UI
 - Scheduled scrape every 2 weeks
-- Single-process pipeline
-- Core NLP/LLM extraction pipeline
+- AI agent orchestrates all phases
+  (no fixed pipeline — agent decides
+  tool calls based on review signals)
+- Core extraction + clustering tools
+  (agent calls them, not a script)
 - 4 PM artifact builders
 - MCP delivery to Jira + Notion
+  (first-class delivery layer, not optional)
 - SQLite storage
 
 ### V2/V3 Scope (future)
@@ -125,8 +142,14 @@ Phase 1 Production Results (Mar 2026):
   Low quality:             2,564 (25.6%)
   Usable for Phase 2:      7,014 (70.1%)
 
-### Layer 4 — AI Extraction Pipeline
+### Layer 4 — AI Agent: Extraction
 ✅ V1 Scope | Phase 2
+
+The agent — not a script — orchestrates 
+extraction. It calls the confidence router 
+first, then selects which extractor tools 
+to invoke per review based on the result.
+No hardcoded step sequence.
 
 Enhancement 1: Confidence-Based Routing
   Quick classifier runs first on each 
@@ -154,8 +177,13 @@ Per-intent specialized extraction:
              product area,
              confidence score
 
-### Layer 5 — Clustering + Enhancements
+### Layer 5 — AI Agent: Clustering + Quality
 ✅ V1 Scope | Phase 3
+
+The agent evaluates cluster quality after 
+each pass and dynamically decides whether 
+to tighten, loosen, or escalate to Gemini 
+Pro — no fixed threshold loop.
 
 Clustering algorithm:
   Agglomerative Clustering (scikit-learn)
@@ -244,12 +272,18 @@ RICE-ready Inputs:
                      — PM completes that)
   Effort: blank — PM to complete
 
-### Layer 8 — MCP Delivery
+### Layer 8 — MCP Layer (First-Class Delivery)
 ✅ V1 Scope | Phase 5
 
+MCP is not an export step —
+it is a core architectural layer.
+The AI agent communicates with Notion 
+and Jira directly via MCP, writing 
+context-aware content from the analysis.
+
 Delivery approach: Hybrid MCP
-AI agent orchestrates existing 
-MCP servers — no custom servers built.
+Agent orchestrates official MCP servers —
+no custom MCP servers need to be built.
 
 Notion MCP (Official):
   Pushes executive summary as 
@@ -258,11 +292,17 @@ Notion MCP (Official):
   Notion database
   Triggered after every pipeline run
 
-Why MCP over direct API:
-  Agent writes ticket descriptions 
-  from analysis context — not templates
-  Natural language orchestration
+Jira MCP (Official Atlassian):
+  Creates P0/P1 bug tickets directly
+  Agent writes descriptions from 
+  analysis context — not templates
   Adaptable to Jira project structure
+
+Why MCP over direct API:
+  Agent writes artifact content in 
+  natural language from review context
+  No schema mapping or template filling
+  Works with any Jira/Notion structure
 
 ---
 
@@ -340,38 +380,66 @@ Phase 1 ✅ COMPLETE
   Streamlit UI, langdetect fix
   Usable reviews: 7,014
 
-Phase 2 — AI Extraction Pipeline
-  Confidence-based routing
-  Specialized extractors per intent
-  Atomic item generation
+Phase 2 — Agent: Extraction
+  Build confidence-based routing tool
+  Build per-intent extractor tools
+    (bug extractor, feature extractor,
+     multi-task extractor)
+  Agent dynamically selects tools 
+  per review at runtime
+  Atomic item generation to Gold layer
   Model: Gemini Flash
 
-Phase 3 — Clustering + Enhancements
-  Adaptive clustering
-  LLM-as-judge
-  Delta processing + trend detection
+Phase 3 — Agent: Clustering + Quality
+  Build adaptive clustering tool
+  Build LLM-as-judge tool
+  Build delta + trend detection tool
+  Agent evaluates cluster quality 
+  and escalates borderline merges
   Model: Gemini Pro for adjudication
 
-Phase 4 — Artifact Generation
-  Bug triage matrix
-  Feature extraction
-  RICE inputs
-  Executive summary
+Phase 4 — Agent: Artifact Assembly
+  Agent assembles 4 PM artifacts
+  from Gold layer tables:
+    Bug triage matrix
+    Feature request extraction
+    RICE-ready inputs
+    Executive summary dashboard
 
-Phase 5 — MCP Delivery
-  Notion MCP connection
-  Delivery trigger logic
-  PM confirmation UI for P2/P3
+Phase 5 — MCP Layer
+  Connect agent to Notion MCP server
+  Connect agent to Jira MCP server
+  Agent pushes artifacts via MCP 
+  after every pipeline run
+  PM confirmation UI for P0/P1 tickets
 
 ---
 
 ## 10. V1 Acceptance Criteria
 
 Input: 7,014 usable reviews
+
+Agent behavior:
+  Routes each review dynamically 
+  (no fixed extraction for all reviews)
+  Escalates ambiguous clustering 
+  decisions to Gemini Pro
+  Flags low-quality outputs via 
+  LLM-as-judge before delivery
+
 Output: 4 artifacts generated,
         each deduplicated and grouped,
         includes drill-down evidence,
         P0/P1 highlighted clearly,
-        exports cleanly for PM workflows
-Pipeline: repeatable, monitored,
-          runs on incremental new reviews
+        delivered via MCP to Notion/Jira
+        (not exported as files)
+
+MCP delivery:
+  Executive summary → Notion page
+  RICE inputs → Notion database
+  P0/P1 bugs → Jira tickets
+  Agent writes all content from 
+  analysis context, not templates
+
+System: repeatable, agent-orchestrated,
+        runs incrementally on new reviews
