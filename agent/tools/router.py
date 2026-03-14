@@ -17,15 +17,20 @@ logger = logging.getLogger(__name__)
 genai.configure(api_key=GEMINI_API_KEY)
 
 
-def route_review(cleaned_text: str) -> dict:
+def route_review(cleaned_text: str, rating: int | None = None) -> dict:
     """
     Classify a single review into bug / feature / ambiguous / noise.
+
+    Args:
+        cleaned_text: Pre-processed review text.
+        rating:       Star rating (1–5) from the original review, or None if unknown.
 
     Returns:
         dict with keys: intent (str), confidence (float)
         Falls back to {"intent": "ambiguous", "confidence": 0.0} on any error.
     """
-    prompt = router_prompt.USER_TMPL.format(text=cleaned_text[:1500])
+    rating_str = str(rating) if rating is not None else "?"
+    prompt = router_prompt.USER_TMPL.format(text=cleaned_text[:1500], rating=rating_str)
     try:
         model = genai.GenerativeModel(
             model_name=GEMINI_FLASH_MODEL,

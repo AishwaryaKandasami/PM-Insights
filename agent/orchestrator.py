@@ -69,9 +69,18 @@ def run_extraction(run_id: str, sample_limit: Optional[int] = DEFAULT_SAMPLE_LIM
         cleaned_text = row["cleaned_text"] or ""
 
         # ── Step 1: Route ────────────────────────────────────────────────
-        route = route_review(cleaned_text)
+        rating = row["rating"] if "rating" in row.keys() else None
+        route = route_review(cleaned_text, rating=rating)
         intent = route["intent"]
         router_confidence = route["confidence"]
+
+        # Low-confidence noise → reroute to ambiguous rather than silently drop
+        if intent == "noise" and router_confidence < 0.75:
+            logger.info(
+                "review_id=%s noise confidence=%.2f < 0.75 → rerouted to ambiguous",
+                review_id, router_confidence,
+            )
+            intent = "ambiguous"
 
         logger.info(
             "review_id=%s → intent=%s (confidence=%.2f)",

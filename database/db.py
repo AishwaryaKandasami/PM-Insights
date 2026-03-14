@@ -218,13 +218,14 @@ def fetch_usable_normalized(run_id: str, limit: Optional[int] = None) -> List[sq
     supported English, not low quality, not duplicates.
     """
     sql = """
-        SELECT review_id, cleaned_text
-        FROM reviews_normalized
-        WHERE run_id = ?
+        SELECT n.review_id, n.cleaned_text, r.rating
+        FROM reviews_normalized n
+        LEFT JOIN raw_reviews r USING (review_id)
+        WHERE n.run_id = ?
           AND is_supported = 1
           AND is_low_quality = 0
           AND is_duplicate = 0
-        ORDER BY review_id
+        ORDER BY n.review_id
     """
     params: list = [run_id]
     if limit is not None:
