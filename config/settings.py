@@ -27,7 +27,7 @@ SCRAPER_MAX_JITTER = 1
 # Phase 2 — model config
 GEMINI_FLASH_MODEL = "gemini-2.5-flash"
 GEMINI_PRO_MODEL = "gemini-2.5-pro"
-EMBEDDING_MODEL = "text-embedding-004"
+EMBEDDING_MODEL = "gemini-embedding-001"
 
 # Token limits
 MAX_TOKENS_PER_REVIEW = 512

@@ -11,6 +11,7 @@ from database.db import get_pipeline_run, init_db, fetch_recent_runs
 from pipeline.ingestion import ValidationError, load_and_validate
 from pipeline.normalization import normalize_reviews
 from agent.orchestrator import run_extraction
+from agent.clustering_orchestrator import run_clustering
 from pipeline.scraper import ScraperError, scrape_reviews, set_progress_callback
 
 
@@ -242,6 +243,38 @@ def main() -> None:
                 ])
             except Exception as exc:
                 st.error(f"Extraction failed: {exc}")
+
+    st.markdown("---")
+    st.subheader("Phase 3 — Clustering + Quality")
+    st.caption(
+        "Embeds atoms → clusters with cosine distance → labels via LLM → "
+        "scores frequency/severity → LLM-as-Judge quality check."
+    )
+    if st.button(
+        "▶ Run Clustering + Quality",
+        disabled=st.session_state.current_run_id is None,
+        key="btn_phase3",
+    ):
+        run_id_p3 = st.session_state.current_run_id
+        with st.spinner("Clustering in progress… embedding + labeling + judging (~2-5 min)..."):
+            try:
+                result = run_clustering(run_id_p3)
+                st.success("Clustering complete!")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Bug Clusters", result["bug_clusters"])
+                    st.caption(f"{result['bug_flagged']} flagged for review")
+                with col2:
+                    st.metric("Feature Clusters", result["feature_clusters"])
+                    st.caption(f"{result['feature_flagged']} flagged for review")
+                st.table([
+                    {"Type": "Bug", "Atoms": result["bug_atoms"],
+                     "Clusters": result["bug_clusters"], "Flagged": result["bug_flagged"]},
+                    {"Type": "Feature", "Atoms": result["feature_atoms"],
+                     "Clusters": result["feature_clusters"], "Flagged": result["feature_flagged"]},
+                ])
+            except Exception as exc:
+                st.error(f"Clustering failed: {exc}")
 
     st.markdown("---")
     st.subheader("Pipeline Status")

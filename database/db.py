@@ -305,3 +305,78 @@ def fetch_recent_runs(limit: int = 10) -> list:
         )
         return cur.fetchall()
 
+
+# ── Phase 3: Clustering helpers ───────────────────────────────────────
+
+
+def fetch_atoms_by_type(run_id: str, atom_type: str) -> List[sqlite3.Row]:
+    """Fetch all review_atoms of a given type for clustering."""
+    with get_connection() as conn:
+        cur = conn.execute(
+            """
+            SELECT atom_id, review_id, atom_type, title, description,
+                   evidence_spans, product_area, severity_signal,
+                   user_value, confidence_score
+            FROM review_atoms
+            WHERE run_id = ? AND atom_type = ?
+            ORDER BY atom_id
+            """,
+            (run_id, atom_type),
+        )
+        return cur.fetchall()
+
+
+def insert_bug_clusters(rows: Iterable[Dict[str, Any]]) -> None:
+    """Bulk insert into bug_clusters table."""
+    with get_connection() as conn:
+        conn.executemany(
+            """
+            INSERT INTO bug_clusters (
+                cluster_label, severity, frequency, frequency_pct,
+                product_area, top_evidence, review_ids, atom_ids,
+                cohesion_score, signal_confidence, quality_flag,
+                quality_notes, run_id, clustered_at
+            ) VALUES (
+                :cluster_label, :severity, :frequency, :frequency_pct,
+                :product_area, :top_evidence, :review_ids, :atom_ids,
+                :cohesion_score, :signal_confidence, :quality_flag,
+                :quality_notes, :run_id, :clustered_at
+            )
+            """,
+            list(rows),
+        )
+        conn.commit()
+
+
+def insert_feature_clusters(rows: Iterable[Dict[str, Any]]) -> None:
+    """Bulk insert into feature_clusters table."""
+    with get_connection() as conn:
+        conn.executemany(
+            """
+            INSERT INTO feature_clusters (
+                cluster_label, theme, frequency, frequency_pct,
+                product_area, user_value_summary, top_evidence,
+                review_ids, atom_ids, cohesion_score, signal_confidence,
+                quality_flag, quality_notes, run_id, clustered_at
+            ) VALUES (
+                :cluster_label, :theme, :frequency, :frequency_pct,
+                :product_area, :user_value_summary, :top_evidence,
+                :review_ids, :atom_ids, :cohesion_score, :signal_confidence,
+                :quality_flag, :quality_notes, :run_id, :clustered_at
+            )
+            """,
+            list(rows),
+        )
+        conn.commit()
+
+
+def fetch_clusters(run_id: str, cluster_type: str) -> List[sqlite3.Row]:
+    """Fetch clusters for verification. cluster_type: 'bug' or 'feature'."""
+    table = "bug_clusters" if cluster_type == "bug" else "feature_clusters"
+    with get_connection() as conn:
+        cur = conn.execute(
+            f"SELECT * FROM {table} WHERE run_id = ? ORDER BY frequency DESC",
+            (run_id,),
+        )
+        return cur.fetchall()
+

@@ -82,3 +82,48 @@ CREATE INDEX IF NOT EXISTS idx_review_atoms_run_id
 CREATE INDEX IF NOT EXISTS idx_review_atoms_review_id
     ON review_atoms (review_id);
 
+-- Gold Layer: consolidated bug clusters from Phase 3
+CREATE TABLE IF NOT EXISTS bug_clusters (
+    cluster_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cluster_label TEXT NOT NULL,
+    severity TEXT,
+    frequency INTEGER,
+    frequency_pct REAL,
+    product_area TEXT,
+    top_evidence TEXT,
+    review_ids TEXT,
+    atom_ids TEXT,
+    cohesion_score REAL,
+    signal_confidence REAL,
+    quality_flag TEXT,
+    quality_notes TEXT,
+    run_id TEXT NOT NULL,
+    clustered_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_bug_clusters_run_id
+    ON bug_clusters (run_id);
+
+-- Gold Layer: consolidated feature clusters from Phase 3
+CREATE TABLE IF NOT EXISTS feature_clusters (
+    cluster_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cluster_label TEXT NOT NULL,
+    theme TEXT,
+    frequency INTEGER,
+    frequency_pct REAL,
+    product_area TEXT,
+    user_value_summary TEXT,
+    top_evidence TEXT,
+    review_ids TEXT,
+    atom_ids TEXT,
+    cohesion_score REAL,
+    signal_confidence REAL,
+    quality_flag TEXT,
+    quality_notes TEXT,
+    run_id TEXT NOT NULL,
+    clustered_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_feature_clusters_run_id
+    ON feature_clusters (run_id);
+
