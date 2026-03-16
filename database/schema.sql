@@ -127,3 +127,74 @@ CREATE TABLE IF NOT EXISTS feature_clusters (
 CREATE INDEX IF NOT EXISTS idx_feature_clusters_run_id
     ON feature_clusters (run_id);
 
+-- Gold Layer: Phase 4 artifact tables
+
+CREATE TABLE IF NOT EXISTS triage_matrix (
+    triage_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cluster_id INTEGER,
+    severity TEXT,
+    title TEXT NOT NULL,
+    frequency INTEGER,
+    frequency_pct REAL,
+    product_area TEXT,
+    top_evidence TEXT,
+    review_ids TEXT,
+    signal_confidence REAL,
+    quality_flag TEXT,
+    run_id TEXT NOT NULL,
+    generated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_triage_matrix_run_id
+    ON triage_matrix (run_id);
+
+CREATE TABLE IF NOT EXISTS feature_requests (
+    request_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cluster_id INTEGER,
+    title TEXT NOT NULL,
+    theme TEXT,
+    frequency INTEGER,
+    frequency_pct REAL,
+    product_area TEXT,
+    user_value_summary TEXT,
+    top_evidence TEXT,
+    review_ids TEXT,
+    signal_confidence REAL,
+    quality_flag TEXT,
+    run_id TEXT NOT NULL,
+    generated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_feature_requests_run_id
+    ON feature_requests (run_id);
+
+CREATE TABLE IF NOT EXISTS rice_inputs (
+    rice_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_type TEXT,
+    cluster_id INTEGER,
+    title TEXT NOT NULL,
+    reach INTEGER,
+    impact TEXT,
+    signal_confidence REAL,
+    confidence_note TEXT,
+    effort TEXT,
+    rice_score TEXT,
+    run_id TEXT NOT NULL,
+    generated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_rice_inputs_run_id
+    ON rice_inputs (run_id);
+
+CREATE TABLE IF NOT EXISTS dashboard_metrics (
+    metric_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    metric_name TEXT NOT NULL,
+    metric_value TEXT NOT NULL,
+    category TEXT,
+    run_id TEXT NOT NULL,
+    generated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_dashboard_metrics_run_id
+    ON dashboard_metrics (run_id);
+

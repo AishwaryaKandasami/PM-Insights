@@ -380,3 +380,125 @@ def fetch_clusters(run_id: str, cluster_type: str) -> List[sqlite3.Row]:
         )
         return cur.fetchall()
 
+
+# ── Phase 4: Artifact helpers ─────────────────────────────────────────
+
+
+def insert_triage_matrix(rows: Iterable[Dict[str, Any]]) -> None:
+    """Bulk insert into triage_matrix table."""
+    with get_connection() as conn:
+        conn.executemany(
+            """
+            INSERT INTO triage_matrix (
+                cluster_id, severity, title, frequency, frequency_pct,
+                product_area, top_evidence, review_ids,
+                signal_confidence, quality_flag, run_id, generated_at
+            ) VALUES (
+                :cluster_id, :severity, :title, :frequency, :frequency_pct,
+                :product_area, :top_evidence, :review_ids,
+                :signal_confidence, :quality_flag, :run_id, :generated_at
+            )
+            """,
+            list(rows),
+        )
+        conn.commit()
+
+
+def insert_feature_requests(rows: Iterable[Dict[str, Any]]) -> None:
+    """Bulk insert into feature_requests table."""
+    with get_connection() as conn:
+        conn.executemany(
+            """
+            INSERT INTO feature_requests (
+                cluster_id, title, theme, frequency, frequency_pct,
+                product_area, user_value_summary, top_evidence,
+                review_ids, signal_confidence, quality_flag,
+                run_id, generated_at
+            ) VALUES (
+                :cluster_id, :title, :theme, :frequency, :frequency_pct,
+                :product_area, :user_value_summary, :top_evidence,
+                :review_ids, :signal_confidence, :quality_flag,
+                :run_id, :generated_at
+            )
+            """,
+            list(rows),
+        )
+        conn.commit()
+
+
+def insert_rice_inputs(rows: Iterable[Dict[str, Any]]) -> None:
+    """Bulk insert into rice_inputs table."""
+    with get_connection() as conn:
+        conn.executemany(
+            """
+            INSERT INTO rice_inputs (
+                source_type, cluster_id, title, reach, impact,
+                signal_confidence, confidence_note, effort,
+                rice_score, run_id, generated_at
+            ) VALUES (
+                :source_type, :cluster_id, :title, :reach, :impact,
+                :signal_confidence, :confidence_note, :effort,
+                :rice_score, :run_id, :generated_at
+            )
+            """,
+            list(rows),
+        )
+        conn.commit()
+
+
+def insert_dashboard_metrics(rows: Iterable[Dict[str, Any]]) -> None:
+    """Bulk insert into dashboard_metrics table."""
+    with get_connection() as conn:
+        conn.executemany(
+            """
+            INSERT INTO dashboard_metrics (
+                metric_name, metric_value, category, run_id, generated_at
+            ) VALUES (
+                :metric_name, :metric_value, :category, :run_id, :generated_at
+            )
+            """,
+            list(rows),
+        )
+        conn.commit()
+
+
+def fetch_triage_matrix(run_id: str) -> List[sqlite3.Row]:
+    """Fetch triage matrix rows for a run, ordered by severity then frequency."""
+    sev_order = "CASE severity WHEN 'P0' THEN 0 WHEN 'P1' THEN 1 WHEN 'P2' THEN 2 ELSE 3 END"
+    with get_connection() as conn:
+        cur = conn.execute(
+            f"SELECT * FROM triage_matrix WHERE run_id = ? ORDER BY {sev_order}, frequency DESC",
+            (run_id,),
+        )
+        return cur.fetchall()
+
+
+def fetch_feature_requests(run_id: str) -> List[sqlite3.Row]:
+    """Fetch feature request rows for a run, ordered by frequency."""
+    with get_connection() as conn:
+        cur = conn.execute(
+            "SELECT * FROM feature_requests WHERE run_id = ? ORDER BY frequency DESC",
+            (run_id,),
+        )
+        return cur.fetchall()
+
+
+def fetch_rice_inputs(run_id: str) -> List[sqlite3.Row]:
+    """Fetch RICE input rows for a run, ordered by reach descending."""
+    with get_connection() as conn:
+        cur = conn.execute(
+            "SELECT * FROM rice_inputs WHERE run_id = ? ORDER BY reach DESC",
+            (run_id,),
+        )
+        return cur.fetchall()
+
+
+def fetch_dashboard_metrics(run_id: str) -> List[sqlite3.Row]:
+    """Fetch dashboard metrics for a run."""
+    with get_connection() as conn:
+        cur = conn.execute(
+            "SELECT * FROM dashboard_metrics WHERE run_id = ? ORDER BY category, metric_name",
+            (run_id,),
+        )
+        return cur.fetchall()
+

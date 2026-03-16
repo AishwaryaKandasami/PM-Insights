@@ -7,11 +7,16 @@ import pandas as pd
 import streamlit as st
 
 from config.settings import RAW_DATA_PATH
-from database.db import get_pipeline_run, init_db, fetch_recent_runs
+from database.db import (
+    get_pipeline_run, init_db, fetch_recent_runs,
+    fetch_triage_matrix, fetch_feature_requests,
+    fetch_rice_inputs, fetch_dashboard_metrics,
+)
 from pipeline.ingestion import ValidationError, load_and_validate
 from pipeline.normalization import normalize_reviews
 from agent.orchestrator import run_extraction
 from agent.clustering_orchestrator import run_clustering
+from agent.artifact_orchestrator import run_artifacts
 from pipeline.scraper import ScraperError, scrape_reviews, set_progress_callback
 
 
@@ -277,6 +282,129 @@ def main() -> None:
                 st.error(f"Clustering failed: {exc}")
 
     st.markdown("---")
+    st.subheader("Phase 4 — PM Artifacts")
+    st.caption(
+        "Generates Bug Triage Matrix, Feature Requests, RICE Inputs, "
+        "and Executive Summary from cluster data."
+    )
+    if st.button(
+        "▶ Generate PM Artifacts",
+        disabled=st.session_state.current_run_id is None,
+        key="btn_phase4",
+    ):
+        run_id_p4 = st.session_state.current_run_id
+        with st.spinner("Generating artifacts… triage + features + RICE + summary (~1-2 min)..."):
+            try:
+                result = run_artifacts(run_id_p4)
+                st.success("Artifacts generated!")
+                st.session_state["p4_result"] = result
+            except Exception as exc:
+                st.error(f"Artifact generation failed: {exc}")
+
+    # ── Show artifact tabs if data exists ─────────────────────────────
+    run_id = st.session_state.current_run_id
+    if run_id:
+        triage_rows = fetch_triage_matrix(run_id)
+        feature_rows = fetch_feature_requests(run_id)
+        rice_rows = fetch_rice_inputs(run_id)
+
+        if triage_rows or feature_rows or rice_rows:
+            tab_triage, tab_features, tab_rice, tab_summary = st.tabs(
+                ["🐛 Bug Triage", "✨ Features", "📊 RICE", "📋 Executive Summary"]
+            )
+
+            with tab_triage:
+                if triage_rows:
+                    df = pd.DataFrame([dict(r) for r in triage_rows])
+                    display_cols = [
+                        "severity", "title", "frequency", "frequency_pct",
+                        "product_area", "signal_confidence", "quality_flag",
+                    ]
+                    df_display = df[[c for c in display_cols if c in df.columns]]
+
+                    def _severity_highlight(row):
+                        if row.get("severity") == "P0":
+                            return ["background-color: #ff4444; color: white"] * len(row)
+                        elif row.get("severity") == "P1":
+                            return ["background-color: #ff8c00; color: white"] * len(row)
+                        return [""] * len(row)
+
+                    styled = df_display.style.apply(_severity_highlight, axis=1)
+                    st.dataframe(styled, use_container_width=True)
+
+                    csv_path = st.session_state.get("p4_result", {}).get("triage_csv")
+                    if csv_path:
+                        with open(csv_path, "r", encoding="utf-8") as f:
+                            st.download_button(
+                                "📥 Download Bug Triage CSV",
+                                f.read(), file_name="bug_triage.csv",
+                                mime="text/csv", key="dl_triage",
+                            )
+                else:
+                    st.info("No triage data yet. Generate artifacts first.")
+
+            with tab_features:
+                if feature_rows:
+                    df = pd.DataFrame([dict(r) for r in feature_rows])
+                    display_cols = [
+                        "title", "theme", "frequency", "frequency_pct",
+                        "product_area", "user_value_summary",
+                        "signal_confidence", "quality_flag",
+                    ]
+                    df_display = df[[c for c in display_cols if c in df.columns]]
+                    st.dataframe(df_display, use_container_width=True)
+
+                    csv_path = st.session_state.get("p4_result", {}).get("feature_csv")
+                    if csv_path:
+                        with open(csv_path, "r", encoding="utf-8") as f:
+                            st.download_button(
+                                "📥 Download Feature Requests CSV",
+                                f.read(), file_name="feature_requests.csv",
+                                mime="text/csv", key="dl_features",
+                            )
+                else:
+                    st.info("No feature request data yet.")
+
+            with tab_rice:
+                if rice_rows:
+                    df = pd.DataFrame([dict(r) for r in rice_rows])
+                    display_cols = [
+                        "source_type", "title", "reach", "impact",
+                        "signal_confidence", "confidence_note",
+                        "effort", "rice_score",
+                    ]
+                    df_display = df[[c for c in display_cols if c in df.columns]]
+                    st.dataframe(df_display, use_container_width=True)
+
+                    csv_path = st.session_state.get("p4_result", {}).get("rice_csv")
+                    if csv_path:
+                        with open(csv_path, "r", encoding="utf-8") as f:
+                            st.download_button(
+                                "📥 Download RICE Inputs CSV",
+                                f.read(), file_name="rice_inputs.csv",
+                                mime="text/csv", key="dl_rice",
+                            )
+                else:
+                    st.info("No RICE data yet.")
+
+            with tab_summary:
+                md_path = st.session_state.get("p4_result", {}).get("summary_md")
+                if md_path:
+                    try:
+                        with open(md_path, "r", encoding="utf-8") as f:
+                            md_content = f.read()
+                        st.markdown(md_content)
+                        st.download_button(
+                            "📥 Download Executive Summary",
+                            md_content, file_name="executive_summary.md",
+                            mime="text/markdown", key="dl_summary",
+                        )
+                    except FileNotFoundError:
+                        st.info("Summary file not found. Generate artifacts first.")
+                else:
+                    st.info("No executive summary yet. Generate artifacts first.")
+
+    st.markdown("---")
     st.subheader("Pipeline Status")
     run_id = st.session_state.current_run_id
     if run_id:
@@ -291,4 +419,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

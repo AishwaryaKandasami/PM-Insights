@@ -4,5 +4,6 @@ __pycache__/
 *.db
 data/raw/
 outputs/
+!outputs/.gitkeep
 .DS_Store
 
