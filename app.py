@@ -224,20 +224,20 @@ def main() -> None:
             st.write("Normalization summary:", summary)
 
     st.markdown("---")
-    st.subheader("Phase 2 — AI Extraction (50-review sample)")
+    st.subheader("Phase 2 — AI Extraction (Full Dataset)")
     st.caption(
         "Agent routes each review (bug / feature / ambiguous / noise) then "
         "calls the matching extractor. Writes atoms to Gold layer."
     )
     if st.button(
-        "▶ Run AI Extraction (50-review sample)",
+        "▶ Run AI Extraction (Full Dataset)",
         disabled=st.session_state.current_run_id is None,
         key="btn_phase2",
     ):
         run_id_p2 = st.session_state.current_run_id
-        with st.spinner("Agent running… routing + extracting (≈50 Gemini calls, ~5-10 min)..."):
+        with st.spinner("Agent running… routing + extracting (this may take a while)..."):
             try:
-                result = run_extraction(run_id_p2, sample_limit=50)
+                result = run_extraction(run_id_p2, sample_limit=None)
                 st.success(f"Extraction complete — {result['atoms_written']} atoms written to DB.")
                 st.table([
                     {"Route": "Bug",       "Count": result["routed_bug"]},

@@ -23,8 +23,8 @@ from agent.tools.multi_extractor import extract_all
 
 logger = logging.getLogger(__name__)
 
-# Default sample size for Phase 2 smoke testing
-DEFAULT_SAMPLE_LIMIT = 50
+# Default sample size for Phase 2 (None = all usable reviews)
+DEFAULT_SAMPLE_LIMIT = None
 
 
 def run_extraction(run_id: str, sample_limit: Optional[int] = DEFAULT_SAMPLE_LIMIT) -> dict:
