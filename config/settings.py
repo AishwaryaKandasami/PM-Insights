@@ -4,7 +4,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
-load_dotenv()
+load_dotenv(override=True)
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -26,8 +26,9 @@ SCRAPER_MAX_JITTER = 1
 
 # Phase 2 — model config
 GEMINI_FLASH_MODEL = "gemini-2.5-flash"
-GEMINI_PRO_MODEL = "gemini-2.5-pro"
+GEMINI_PRO_MODEL = "gemini-2.5-flash"
 EMBEDDING_MODEL = "gemini-embedding-001"
+
 
 # Token limits
 MAX_TOKENS_PER_REVIEW = 512
@@ -35,10 +36,11 @@ BATCH_SIZE = 50
 
 # Rate limits
 REQUESTS_PER_MINUTE = 15
-MIN_DELAY_SECONDS = 4
+MIN_DELAY_SECONDS = 1
 
 # Clustering
-COSINE_DISTANCE_THRESHOLD = 0.25
+COSINE_DISTANCE_THRESHOLD = 0.15
+
 
 # Evaluation thresholds
 SEVERITY_DRIFT_THRESHOLD = 0.10
