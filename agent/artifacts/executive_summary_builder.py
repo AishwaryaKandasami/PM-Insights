@@ -10,12 +10,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import google.generativeai as genai
+import os
+from groq import Groq
 
 from agent.prompts import executive_summary_prompt
 from config.settings import (
-    GEMINI_API_KEY,
-    GEMINI_FLASH_MODEL,
     MIN_DELAY_SECONDS,
     OUTPUT_PATH,
 )
@@ -26,8 +25,6 @@ from database.db import (
 )
 
 logger = logging.getLogger(__name__)
-
-genai.configure(api_key=GEMINI_API_KEY)
 
 
 def _format_bug_data(clusters: list[dict]) -> str:
@@ -68,7 +65,7 @@ def _format_feature_data(clusters: list[dict]) -> str:
 
 def build_executive_summary(run_id: str) -> dict[str, Any]:
     """
-    Generate an executive summary using Gemini Flash.
+    Generate an executive summary using Groq Llama.
 
     Reads clusters + pipeline metadata, calls LLM, writes metrics
     to dashboard_metrics, exports markdown to outputs/.
@@ -89,7 +86,7 @@ def build_executive_summary(run_id: str) -> dict[str, Any]:
     flagged_bugs = sum(1 for c in bug_clusters if c.get("quality_flag") == "review")
     flagged_features = sum(1 for c in feature_clusters if c.get("quality_flag") == "review")
 
-    # ── Generate summary via Gemini Flash ─────────────────────────────
+    # ── Generate summary via Groq Llama ───────────────────────────────
     prompt = executive_summary_prompt.USER_TMPL.format(
         run_id=run_id,
         total_reviews=total_reviews or "N/A",
@@ -102,21 +99,25 @@ def build_executive_summary(run_id: str) -> dict[str, Any]:
         flagged_features=flagged_features,
     )
 
-    model = genai.GenerativeModel(
-        model_name=GEMINI_FLASH_MODEL,
-        system_instruction=executive_summary_prompt.SYSTEM,
-        generation_config=genai.GenerationConfig(temperature=0),
-    )
+    client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
     try:
-        response = model.generate_content(prompt)
-        summary_md = response.text.strip()
+        response = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": executive_summary_prompt.SYSTEM},
+                {"role": "user", "content": prompt}
+            ],
+            model="llama-3.3-70b-versatile",
+            temperature=0,
+        )
+        summary_md = response.choices[0].message.content.strip()
         logger.info("Executive summary generated (%d chars)", len(summary_md))
     except Exception as exc:
         logger.error("Executive summary generation failed: %s", exc)
         summary_md = f"# Executive Summary\n\n_Generation failed: {exc}_"
     finally:
         time.sleep(MIN_DELAY_SECONDS)
+
 
     # ── Write dashboard_metrics ───────────────────────────────────────
     generated_at = datetime.now(timezone.utc).isoformat()
