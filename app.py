@@ -389,7 +389,14 @@ def main() -> None:
 
             with tab_summary:
                 md_path = st.session_state.get("p4_result", {}).get("summary_md")
+                if not md_path and run_id:
+                    from config.settings import OUTPUT_PATH
+                    potential = OUTPUT_PATH / f"{run_id}_executive_summary.md"
+                    if potential.exists():
+                        md_path = str(potential)
+
                 if md_path:
+
                     try:
                         with open(md_path, "r", encoding="utf-8") as f:
                             md_content = f.read()
