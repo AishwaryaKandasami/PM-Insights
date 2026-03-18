@@ -34,7 +34,10 @@ def build_triage_matrix(run_id: str) -> dict[str, Any]:
 
     for c in clusters:
         row = dict(c)
+        if row.get("cluster_label") == "Unlabeled":
+            continue
         rows.append({
+
             "cluster_id": row["cluster_id"],
             "severity": row.get("severity", "P3"),
             "title": row["cluster_label"],

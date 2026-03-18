@@ -47,8 +47,10 @@ def run_artifacts(run_id: str) -> dict[str, Any]:
     logger.info("RICE: %s", rice)
 
     # ── 4. Executive Summary ──────────────────────────────────────────
-    summary = build_executive_summary(run_id)
-    logger.info("Summary: %s", summary)
+    # summary = build_executive_summary(run_id)
+    summary = {"metrics": [], "md_path": None}
+    logger.info("Summary: Skipped to prevent API calls")
+
 
     # ── Update pipeline status ────────────────────────────────────────
     existing = get_pipeline_run(run_id)

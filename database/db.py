@@ -216,6 +216,7 @@ def fetch_usable_normalized(run_id: str, limit: Optional[int] = None) -> List[sq
     """
     Fetch normalized reviews that are usable for Phase 2 extraction:
     supported English, not low quality, not duplicates.
+    Excludes reviews that ALREADY have items in review_atoms for this run_id.
     """
     sql = """
         SELECT n.review_id, n.cleaned_text, r.rating
@@ -225,9 +226,10 @@ def fetch_usable_normalized(run_id: str, limit: Optional[int] = None) -> List[sq
           AND is_supported = 1
           AND is_low_quality = 0
           AND is_duplicate = 0
+          AND n.review_id NOT IN (SELECT DISTINCT review_id FROM review_atoms WHERE run_id = ?)
         ORDER BY n.review_id
     """
-    params: list = [run_id]
+    params: list = [run_id, run_id]
     if limit is not None:
         sql += " LIMIT ?"
         params.append(limit)
@@ -386,7 +388,12 @@ def fetch_clusters(run_id: str, cluster_type: str) -> List[sqlite3.Row]:
 
 def insert_triage_matrix(rows: Iterable[Dict[str, Any]]) -> None:
     """Bulk insert into triage_matrix table."""
+    rows_list = list(rows)
+    if not rows_list:
+        return
+    run_id = rows_list[0]["run_id"]
     with get_connection() as conn:
+        conn.execute("DELETE FROM triage_matrix WHERE run_id = ?", (run_id,))
         conn.executemany(
             """
             INSERT INTO triage_matrix (
@@ -406,7 +413,12 @@ def insert_triage_matrix(rows: Iterable[Dict[str, Any]]) -> None:
 
 def insert_feature_requests(rows: Iterable[Dict[str, Any]]) -> None:
     """Bulk insert into feature_requests table."""
+    rows_list = list(rows)
+    if not rows_list:
+        return
+    run_id = rows_list[0]["run_id"]
     with get_connection() as conn:
+        conn.execute("DELETE FROM feature_requests WHERE run_id = ?", (run_id,))
         conn.executemany(
             """
             INSERT INTO feature_requests (
@@ -428,7 +440,12 @@ def insert_feature_requests(rows: Iterable[Dict[str, Any]]) -> None:
 
 def insert_rice_inputs(rows: Iterable[Dict[str, Any]]) -> None:
     """Bulk insert into rice_inputs table."""
+    rows_list = list(rows)
+    if not rows_list:
+        return
+    run_id = rows_list[0]["run_id"]
     with get_connection() as conn:
+        conn.execute("DELETE FROM rice_inputs WHERE run_id = ?", (run_id,))
         conn.executemany(
             """
             INSERT INTO rice_inputs (
@@ -448,7 +465,12 @@ def insert_rice_inputs(rows: Iterable[Dict[str, Any]]) -> None:
 
 def insert_dashboard_metrics(rows: Iterable[Dict[str, Any]]) -> None:
     """Bulk insert into dashboard_metrics table."""
+    rows_list = list(rows)
+    if not rows_list:
+        return
+    run_id = rows_list[0]["run_id"]
     with get_connection() as conn:
+        conn.execute("DELETE FROM dashboard_metrics WHERE run_id = ?", (run_id,))
         conn.executemany(
             """
             INSERT INTO dashboard_metrics (

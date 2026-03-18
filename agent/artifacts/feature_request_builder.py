@@ -34,7 +34,10 @@ def build_feature_requests(run_id: str) -> dict[str, Any]:
 
     for c in clusters:
         row = dict(c)
+        if row.get("cluster_label") == "Unlabeled":
+            continue
         rows.append({
+
             "cluster_id": row["cluster_id"],
             "title": row["cluster_label"],
             "theme": row.get("theme", "Other"),

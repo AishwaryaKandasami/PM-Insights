@@ -45,6 +45,8 @@ def build_rice_inputs(run_id: str) -> dict[str, Any]:
 
     for c in bug_clusters:
         row = dict(c)
+        if row.get("cluster_label") == "Unlabeled":
+            continue
         rows.append({
             "source_type": "bug",
             "cluster_id": row["cluster_id"],
@@ -61,7 +63,10 @@ def build_rice_inputs(run_id: str) -> dict[str, Any]:
 
     for c in feature_clusters:
         row = dict(c)
+        if row.get("cluster_label") == "Unlabeled":
+            continue
         rows.append({
+
             "source_type": "feature",
             "cluster_id": row["cluster_id"],
             "title": row["cluster_label"],
