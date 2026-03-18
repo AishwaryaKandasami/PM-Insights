@@ -17,39 +17,62 @@ logger = logging.getLogger(__name__)
 genai.configure(api_key=GEMINI_API_KEY)
 
 
-def route_review(cleaned_text: str, rating: int | None = None) -> dict:
+def route_reviews_batch(reviews: list[dict]) -> dict[str, dict]:
     """
-    Classify a single review into bug / feature / ambiguous / noise.
+    Classify a batch of reviews into bug / feature / ambiguous / noise.
 
     Args:
-        cleaned_text: Pre-processed review text.
-        rating:       Star rating (1–5) from the original review, or None if unknown.
+        reviews: List of dicts with keys: review_id, cleaned_text, rating (optional)
 
     Returns:
-        dict with keys: intent (str), confidence (float)
-        Falls back to {"intent": "ambiguous", "confidence": 0.0} on any error.
+        dict mapping review_id -> {"intent": str, "confidence": float}
+        Defaults to "ambiguous" for any items missing from response.
     """
-    rating_str = str(rating) if rating is not None else "?"
-    prompt = router_prompt.USER_TMPL.format(text=cleaned_text[:1500], rating=rating_str)
-    try:
-        model = genai.GenerativeModel(
-            model_name=GEMINI_FLASH_MODEL,
-            system_instruction=router_prompt.SYSTEM,
-            generation_config=genai.GenerationConfig(
-                temperature=0,
-                response_mime_type="application/json",
-            ),
-        )
-        response = model.generate_content(prompt)
-        result = json.loads(response.text.strip())
-        intent = result.get("intent", "ambiguous")
-        confidence = float(result.get("confidence", 0.0))
-        if intent not in {"bug", "feature", "ambiguous", "noise"}:
-            logger.warning("Router returned unexpected intent=%r — defaulting to ambiguous", intent)
-            intent = "ambiguous"
-        return {"intent": intent, "confidence": confidence}
-    except Exception as exc:
-        logger.error("Router error: %s", exc)
-        return {"intent": "ambiguous", "confidence": 0.0}
-    finally:
-        time.sleep(MIN_DELAY_SECONDS)
+    input_batch = []
+    for r in reviews:
+        input_batch.append({
+            "review_id": r["review_id"],
+            "text": (r.get("cleaned_text") or "")[:1500],
+            "rating": r.get("rating")
+        })
+        
+    prompt = router_prompt.USER_TMPL.format(reviews_json=json.dumps(input_batch))
+    max_retries = 3
+    responses_map = {}
+    
+    for attempt in range(max_retries):
+        try:
+            model = genai.GenerativeModel(
+                model_name=GEMINI_FLASH_MODEL,
+                system_instruction=router_prompt.SYSTEM,
+                generation_config=genai.GenerationConfig(
+                    temperature=0,
+                    response_mime_type="application/json",
+                ),
+            )
+            response = model.generate_content(prompt, request_options={"timeout": 60.0})
+            result = json.loads(response.text.strip())
+            
+            if not isinstance(result, list):
+                logger.warning("Router batch: expected list response, got %s", type(result))
+                return {}
+                
+            for item in result:
+                r_id = item.get("review_id")
+                intent = item.get("intent", "ambiguous")
+                confidence = float(item.get("confidence", 0.0))
+                if intent not in {"bug", "feature", "ambiguous", "noise"}:
+                    intent = "ambiguous"
+                if r_id:
+                    responses_map[r_id] = {"intent": intent, "confidence": confidence}
+                    
+            return responses_map
+            
+        except Exception as exc:
+            if attempt == max_retries - 1:
+                logger.error("Router batch error after %d retries: %s", max_retries, exc)
+                return responses_map
+            logger.warning("Router batch attempt %d failed: %s - retrying...", attempt + 1, exc)
+            time.sleep(2 ** attempt)
+            
+    return responses_map

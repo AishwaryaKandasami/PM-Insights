@@ -1,0 +1,27 @@
+{
+  "Phase 1: Normalization": {
+    "original_text": "Best music source on the market by far",
+    "cleaned_text": "Best music source on the market by far",
+    "is_supported": 1,
+    "is_low_quality": 0,
+    "language": "en"
+  },
+  "Phase 2: Extraction": {
+    "type": "bug",
+    "title": "Podcast playback position not remembered",
+    "description": "The app fails to remember the user's last playback location within podcasts, making the feature unusable.",
+    "product_area": "Playback",
+    "severity": "P1"
+  },
+  "Phase 3: Bug Clustering": {
+    "label": "Critical App Stability, Playback, and Core Feature Issues",
+    "severity": "P0",
+    "frequency": 10,
+    "product_area": "Core App Experience"
+  },
+  "Phase 3: Feature Clustering": {
+    "label": "Improve Free Tier & Reduce Monetization Friction",
+    "frequency": 13,
+    "product_area": "N/A"
+  }
+}

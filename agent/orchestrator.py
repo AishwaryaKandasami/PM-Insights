@@ -8,6 +8,8 @@ The agent decides per review which tool to call — no hardcoded step order.
 import logging
 from datetime import datetime, timezone
 from typing import Optional
+import concurrent.futures
+import threading
 
 from database.db import (
     fetch_usable_normalized,
@@ -16,10 +18,10 @@ from database.db import (
     insert_review_atoms,
     upsert_pipeline_run,
 )
-from agent.tools.router import route_review
-from agent.tools.bug_extractor import extract_bugs
-from agent.tools.feature_extractor import extract_features
-from agent.tools.multi_extractor import extract_all
+from agent.tools.router import route_reviews_batch
+from agent.tools.bug_extractor import extract_bugs_batch
+from agent.tools.feature_extractor import extract_features_batch
+from agent.tools.multi_extractor import extract_all_batch
 
 logger = logging.getLogger(__name__)
 
@@ -63,62 +65,105 @@ def run_extraction(run_id: str, sample_limit: Optional[int] = DEFAULT_SAMPLE_LIM
 
     all_atoms: list[dict] = []
     extracted_at = datetime.now(timezone.utc).isoformat()
+    db_lock = threading.Lock()
 
-    for row in reviews:
-        review_id = row["review_id"]
-        cleaned_text = row["cleaned_text"] or ""
+    def process_batch(batch):
+        # Convert sqlite3.Row objects to dicts
+        batch_dicts = [dict(r) for r in batch]
+        
+        # 1. Route batch
+        route_map = route_reviews_batch(batch_dicts)
+        
+        bug_batch = []
+        feature_batch = []
+        all_batch = []
+        batch_atoms = []
+        skipped_noise = 0
+        
+        for r in batch_dicts:
+            r_id = r["review_id"]
+            route = route_map.get(r_id, {"intent": "ambiguous", "confidence": 0.0})
+            intent = route["intent"]
+            confidence = route["confidence"]
+            
+            if intent == "noise" and confidence < 0.75:
+                intent = "ambiguous"
+                
+            logger.info("review_id=%s → intent=%s (confidence=%.2f)", r_id, intent, confidence)
+            
+            if intent == "noise":
+                skipped_noise += 1
+                continue
+            if intent == "bug":
+                bug_batch.append(r)
+            elif intent == "feature":
+                feature_batch.append(r)
+            else:
+                all_batch.append(r)
 
-        # ── Step 1: Route ────────────────────────────────────────────────
-        rating = row["rating"] if "rating" in row.keys() else None
-        route = route_review(cleaned_text, rating=rating)
-        intent = route["intent"]
-        router_confidence = route["confidence"]
+        # 2. Extract
+        extracted_subset = []
+        if bug_batch:
+            atoms = extract_bugs_batch(bug_batch)
+            for a in atoms: 
+                a["routed_as"] = "bug"
+            extracted_subset.extend(atoms)
+            
+        if feature_batch:
+            atoms = extract_features_batch(feature_batch)
+            for a in atoms: 
+                a["routed_as"] = "feature"
+            extracted_subset.extend(atoms)
+            
+        if all_batch:
+            atoms = extract_all_batch(all_batch)
+            for a in atoms: 
+                if "routed_as" not in a:
+                    a["routed_as"] = "ambiguous"
+            extracted_subset.extend(atoms)
 
-        # Low-confidence noise → reroute to ambiguous rather than silently drop
-        if intent == "noise" and router_confidence < 0.75:
-            logger.info(
-                "review_id=%s noise confidence=%.2f < 0.75 → rerouted to ambiguous",
-                review_id, router_confidence,
-            )
-            intent = "ambiguous"
-
-        logger.info(
-            "review_id=%s → intent=%s (confidence=%.2f)",
-            review_id, intent, router_confidence,
-        )
-
-        # ── Step 2: Agent selects and calls the right extractor tool ─────
-        if intent == "noise":
-            counters["skipped_noise"] += 1
-            continue
-
-        elif intent == "bug":
-            counters["routed_bug"] += 1
-            atoms = extract_bugs(review_id, cleaned_text)
-
-        elif intent == "feature":
-            counters["routed_feature"] += 1
-            atoms = extract_features(review_id, cleaned_text)
-
-        else:  # ambiguous
-            counters["routed_ambiguous"] += 1
-            atoms = extract_all(review_id, cleaned_text)
-
-        # ── Step 3: Enrich atoms with routing metadata ───────────────────
-        for atom in atoms:
-            atom["routed_as"] = intent
-            atom["router_confidence"] = router_confidence
+        # 3. Enrich with generic metadata
+        for atom in extracted_subset:
+            r_id = atom.get("review_id")
+            atom["router_confidence"] = route_map.get(r_id, {}).get("confidence", 0.0)
             atom["run_id"] = run_id
             atom["extracted_at"] = extracted_at
+            # Default keys required for SQLite bind queries
+            if "severity_signal" not in atom:
+                atom["severity_signal"] = None
+            if "user_value" not in atom:
+                atom["user_value"] = None
 
-        all_atoms.extend(atoms)
+        if extracted_subset:
+            with db_lock:
+                insert_review_atoms(extracted_subset)
+                
+        return (extracted_subset, len(bug_batch), len(feature_batch), len(all_batch), skipped_noise)
 
-    # ── Step 4: Bulk write all atoms to Gold layer ────────────────────────
+    BATCH_SIZE = 10
+    batches = [reviews[i:i + BATCH_SIZE] for i in range(0, len(reviews), BATCH_SIZE)]
+    
+    logger.info("Starting Batch extraction for %d reviews (Total Batches: %d)", len(reviews), len(batches))
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        futures = [executor.submit(process_batch, b) for b in batches]
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                atoms, bug_c, feat_c, amb_c, noise_c = future.result()
+                all_atoms.extend(atoms)
+                counters["atoms_written"] += len(atoms)
+                counters["routed_bug"] += bug_c
+                counters["routed_feature"] += feat_c
+                counters["routed_ambiguous"] += amb_c
+                counters["skipped_noise"] += noise_c
+            except Exception as e:
+                logger.error("Batch processing crashed: %s", e)
+
+    # ── Step 4: Final verification ────────────────────────────────────────
     if all_atoms:
-        insert_review_atoms(all_atoms)
-        counters["atoms_written"] = len(all_atoms)
         logger.info(
-            "Extraction complete for run_id=%s: %d atoms written", run_id, len(all_atoms)
+            "Extraction complete for run_id=%s: %d total atoms written", 
+            run_id, counters["atoms_written"]
         )
 
     # ── Step 5: Update pipeline_runs status ──────────────────────────────

@@ -19,44 +19,59 @@ logger = logging.getLogger(__name__)
 genai.configure(api_key=GEMINI_API_KEY)
 
 
-def extract_features(review_id: str, cleaned_text: str) -> list[dict[str, Any]]:
+def extract_features_batch(reviews: list[dict]) -> list[dict[str, Any]]:
     """
-    Extract feature request items from a single review.
+    Extract feature request items from a batch of reviews.
+
+    Args:
+        reviews: List of dicts with review_id and cleaned_text
 
     Returns:
-        List of feature atom dicts. Empty list if no features found or on error.
+        List of feature atom dicts. Empty list if none found or on error.
     """
-    prompt = feature_extractor_prompt.USER_TMPL.format(text=cleaned_text[:1500])
-    try:
-        model = genai.GenerativeModel(
-            model_name=GEMINI_FLASH_MODEL,
-            system_instruction=feature_extractor_prompt.SYSTEM,
-            generation_config=genai.GenerationConfig(
-                temperature=0,
-                response_mime_type="application/json",
-            ),
-        )
-        response = model.generate_content(prompt)
-        items = json.loads(response.text.strip())
-        if not isinstance(items, list):
-            logger.warning("Feature extractor: non-list response for review_id=%s", review_id)
-            return []
-        return [
-            {
-                "review_id": review_id,
-                "atom_type": "feature",
-                "title": item.get("title", "")[:200],
-                "description": item.get("description", ""),
-                "evidence_spans": json.dumps(item.get("evidence_spans", [])),
-                "product_area": item.get("product_area", "Other"),
-                "severity_signal": None,
-                "user_value": item.get("user_value", ""),
-                "confidence_score": float(item.get("confidence_score", 0.0)),
-            }
-            for item in items
-        ]
-    except Exception as exc:
-        logger.error("Feature extractor error for review_id=%s: %s", review_id, exc)
-        return []
-    finally:
-        time.sleep(MIN_DELAY_SECONDS)
+    input_batch = [{"review_id": r["review_id"], "text": (r.get("cleaned_text") or "")[:1500]} for r in reviews]
+    prompt = feature_extractor_prompt.USER_TMPL.format(reviews_json=json.dumps(input_batch))
+    max_retries = 3
+    items = []
+
+    for attempt in range(max_retries):
+        try:
+            model = genai.GenerativeModel(
+                model_name=GEMINI_FLASH_MODEL,
+                system_instruction=feature_extractor_prompt.SYSTEM,
+                generation_config=genai.GenerationConfig(
+                    temperature=0,
+                    response_mime_type="application/json",
+                ),
+            )
+            response = model.generate_content(prompt, request_options={"timeout": 60.0})
+            items = json.loads(response.text.strip())
+            
+            if not isinstance(items, list):
+                logger.warning("Feature extractor batch: non-list response")
+                return []
+            break
+            
+        except Exception as exc:
+            if attempt == max_retries - 1:
+                logger.error("Feature extractor batch error after %d retries: %s", max_retries, exc)
+                return []
+            logger.warning("Feature extractor batch attempt %d failed: %s - retrying...", attempt + 1, exc)
+            time.sleep(2 ** attempt)
+
+    atoms = []
+    for item in items:
+        r_id = item.get("review_id")
+        if not r_id:
+            continue
+        atoms.append({
+            "review_id": r_id,
+            "atom_type": "feature",
+            "title": item.get("title", "")[:200],
+            "description": item.get("description", ""),
+            "user_value": item.get("user_value", ""),
+            "evidence_spans": json.dumps(item.get("evidence_spans", [])),
+            "product_area": item.get("product_area", "Other"),
+            "confidence_score": float(item.get("confidence_score", 0.0)),
+        })
+    return atoms
