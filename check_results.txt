@@ -4,15 +4,15 @@ reviews_normalized: 10000
 review_atoms: 6512
 bug_clusters: 129
 feature_clusters: 82
-triage_matrix: 259
-feature_requests: 165
+triage_matrix: 129
+feature_requests: 10
 dashboard_metrics: 18
-rice_inputs: 424
+rice_inputs: 139
 pipeline_runs: 1
 
 --- Pipeline Runs ---
                     run_id               status source_type                                                                 source_file             app_id  total_reviews  supported_reviews  duplicate_count  low_quality_count current_step error_message                        started_at                      completed_at
-0  20260309041447_516de1cc  ARTIFACTS_GENERATED     scraped  C:\Users\Aishwarya\PMInsights\data\raw\spotify_reviews_20260309_041447.csv  com.spotify.music          10000               9578                0               2564    artifacts          None  2026-03-09T04:14:47.880888+00:00  2026-03-18T14:46:49.491633+00:00
+0  20260309041447_516de1cc  ARTIFACTS_GENERATED     scraped  C:\Users\Aishwarya\PMInsights\data\raw\spotify_reviews_20260309_041447.csv  com.spotify.music          10000               9578                0               2564    artifacts          None  2026-03-09T04:14:47.880888+00:00  2026-03-18T15:36:09.354682+00:00
 
 --- Sample Atoms ---
    atom_id                             review_id atom_type                                       title                                                                                                                                                               description                                                                                                                                                    evidence_spans product_area severity_signal                                                                                   user_value  confidence_score routed_as  router_confidence                   run_id                      extracted_at

@@ -49,3 +49,10 @@ CLUSTER_COUNT_DRIFT_THRESHOLD = 0.20
 # API keys / secrets
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
+# Notion Phase 5
+NOTION_TOKEN = os.getenv("NOTION_TOKEN")
+NOTION_PAGE_ID = os.getenv("NOTION_PAGE_ID")
+NOTION_DATABASE_NAME_BUGS = "Bug Triage Matrix (Auto)"
+NOTION_DATABASE_NAME_FEATURES = "Feature Request List (Auto)"
+NOTION_DATABASE_NAME_RICE = "RICE Prioritization (Auto)"
+
