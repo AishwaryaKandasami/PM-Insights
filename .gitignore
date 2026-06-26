@@ -1,9 +1,45 @@
-\.env
+# ── Python ────────────────────────────────────────────────────────────
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+.env
+.env.local
+
+# ── Database ──────────────────────────────────────────────────────────
 *.db
-data/raw/
+*.sqlite
+*.sqlite3
+
+# ── Generated outputs ─────────────────────────────────────────────────
 outputs/
-!outputs/.gitkeep
+*.csv
+*.log
+
+# ── Node / Next.js ────────────────────────────────────────────────────
+node_modules/
+.next/
+out/
+.vercel/
+frontend/.env.local
+
+# ── IDE ───────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
 .DS_Store
 
+# ── Secrets ───────────────────────────────────────────────────────────
+*.pem
+*.key
+secrets/

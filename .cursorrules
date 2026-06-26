@@ -1,0 +1,256 @@
+# PM Insights — Cursor Project Rules
+# Cursor reads this automatically before every response.
+
+---
+
+## 1. WHAT THIS PROJECT IS
+
+PM Insights is a multi-tenant SaaS that converts App Store and Play Store
+reviews into prioritised PM artifacts. A PM pastes their app's Play Store
+URL, the system runs a 5-phase AI pipeline, and delivers:
+  - Bug Triage Matrix (bugs ranked by severity + frequency)
+  - Feature Backlog (ranked by user demand)
+  - RICE Prioritisation Table (auto-scored from review volume)
+  - Executive Summary (narrative)
+  - PRD Draft (new — Claude-generated from a single feature cluster click)
+
+Target user: a Product Manager at a mobile-first company.
+They are non-technical. Zero CLI interaction. Everything via web UI.
+
+---
+
+## 2. EXISTING CODE — READ BEFORE TOUCHING ANY FILE
+
+### PRESERVE exactly — do not rewrite logic:
+- backend/agent/prompts/ — all prompt files contain carefully engineered
+  system prompts. Change NOTHING inside these files this sprint.
+- backend/agent/tools/ — extraction, clustering, scoring logic. Wrap only.
+- backend/agent/artifacts/ — artifact builders (bug triage, RICE, feature).
+- backend/pipeline/ — ingestion, normalization, scraper. Preserve exactly.
+- backend/database/schema.sql — reference for column names when building
+  the new PostgreSQL schema.
+
+### DEPRECATED — use only as reference for data shapes, not as patterns:
+- legacy/ — old Streamlit app and CLI run scripts. Never import from here.
+- backend/database/db.py — SQLite-based. Do not use. See Section 10.
+- backend/config/settings.py — has hardcoded Spotify defaults and Notion
+  config. See Section 10. Migrate to pydantic-settings.
+
+---
+
+## 3. TARGET ARCHITECTURE
+
+### Backend
+- Framework: FastAPI (Python 3.11+), async throughout
+- Database: PostgreSQL via Supabase (supabase-py client, NOT SQLAlchemy)
+- Auth: Supabase Auth — verify JWT in FastAPI middleware
+- Queue: Celery + Redis for async pipeline runs
+- AI routing: see Section 6
+- Config: pydantic-settings (backend/core/config.py), all secrets from .env
+
+### Frontend
+- Framework: Next.js 14, App Router only (never Pages Router)
+- Styling: Tailwind CSS + shadcn/ui components only
+- State: Zustand for client state, TanStack Query for server state
+- Auth: @supabase/supabase-js
+- Forms: React Hook Form + Zod
+- HTTP: typed API client in frontend/lib/api.ts
+
+### Infrastructure
+- Backend: Railway (FastAPI + Celery worker + Redis)
+- Frontend: Vercel
+- Storage: Supabase Storage (exported PDFs)
+
+---
+
+## 4. MULTI-TENANCY — CRITICAL
+
+Every database table MUST have `user_id UUID NOT NULL`.
+Enable Supabase Row Level Security on every table.
+Never write a Supabase query without `.eq('user_id', user.id)`.
+
+Schema hierarchy: users → apps → runs → atoms → clusters → artifacts
+
+---
+
+## 5. CORE DOMAIN MODEL — use these exact names everywhere
+
+```
+App       id, user_id, name, play_store_id, app_store_id, category, created_at
+
+Run       id, app_id, user_id, status(pending|processing|complete|failed),
+          date_from, date_to, review_count, created_at, completed_at
+
+Atom      id, run_id, review_id, atom_type(bug|feature_request|sentiment|ux_issue),
+          text, severity(low|medium|high|critical), product_area,
+          confidence_score, source_review
+
+Cluster   id, run_id, label, atom_count, frequency_score, avg_severity,
+          product_area, sample_atoms(jsonb)
+
+Artifact  id, run_id, cluster_id(nullable), artifact_type
+          (bug_triage_matrix|feature_backlog|rice_table|executive_summary|prd_draft),
+          content(jsonb), markdown(text), created_at
+```
+
+Use these exact field names in Pydantic models, API responses, TypeScript
+types. Do not rename or abbreviate.
+
+---
+
+## 6. AI MODEL ROUTING
+
+| Task                       | Model            | Reason                |
+|----------------------------|------------------|-----------------------|
+| Atomic extraction          | Gemini 2.5 Flash | Speed + cost at scale |
+| Cluster label adjudication | Groq / Llama3    | Sub-second latency    |
+| PRD draft generation       | Claude Sonnet    | Quality + structure   |
+| Executive summary          | Claude Haiku     | Cost efficiency       |
+| Competitor diff summary    | Claude Haiku     | Cost efficiency       |
+
+Never use Claude for atomic extraction.
+Never use Gemini for PRD drafts.
+Wrap all LLM calls with exponential backoff for rate limits.
+
+---
+
+## 7. PRD GENERATOR — new feature spec
+
+Trigger: user clicks "Generate PRD" on any Cluster card.
+
+Input: cluster.label, cluster.atom_count, cluster.avg_severity,
+       cluster.sample_atoms (top 10), cluster.product_area,
+       app.name, run.date_from, run.date_to
+
+Claude system prompt (use exactly this in backend/services/ai_service.py):
+"""
+You are a senior product manager writing a Product Requirements Document.
+Write concisely. No filler phrases. Every sentence is a fact, decision, or question.
+Output a PRD with exactly these sections using these headers:
+## Problem Statement
+## User Stories
+## Acceptance Criteria
+## Out of Scope
+## Open Questions
+Do not add any other sections. No introduction or conclusion.
+"""
+
+Store as Artifact with artifact_type='prd_draft'.
+
+---
+
+## 8. API CONVENTIONS
+
+Base path: /api/v1/
+Response envelope:
+  { "data": {...}|[...]|null, "error": null|{"code":"","message":""}, "meta": {"request_id":"","timestamp":""} }
+
+Routes:
+  POST   /api/v1/apps
+  GET    /api/v1/apps
+  POST   /api/v1/apps/{app_id}/runs
+  GET    /api/v1/apps/{app_id}/runs
+  GET    /api/v1/runs/{run_id}/status
+  GET    /api/v1/runs/{run_id}/artifacts
+  POST   /api/v1/clusters/{cluster_id}/prd
+
+Auth: every route requires `user = Depends(get_current_user)`.
+
+---
+
+## 9. CODE STYLE
+
+Python:
+  - async/await everywhere in FastAPI
+  - Pydantic v2 (model_config, not class Config)
+  - Type hints on all function signatures
+  - structlog for logging — never print()
+  - Business logic in services/ — never in route handlers
+  - Max 40 lines per function
+
+TypeScript:
+  - strict: true — no `any`
+  - Server Components by default; 'use client' only when needed
+  - Tailwind only — no inline styles
+  - API calls only through frontend/lib/api.ts
+
+---
+
+## 10. NEVER DO — hard rules
+
+- NEVER use SQLite. PostgreSQL via Supabase only.
+- NEVER import or use Notion SDK. Notion is removed.
+- NEVER generate CLI scripts (no argparse, no --run_id flags).
+- NEVER hardcode app names or app IDs (Spotify is gone).
+- NEVER use print() — use structlog.
+- NEVER put business logic in route handlers.
+- NEVER query a table without user_id filter.
+- NEVER use Pages Router in Next.js.
+- NEVER rewrite logic in backend/agent/ — wrap it in services.
+- NEVER write to an /outputs/ directory at runtime.
+- NEVER commit .env files.
+
+---
+
+## 11. TARGET FOLDER STRUCTURE
+
+```
+PM-Insights/
+├── .cursorrules
+├── .env.example
+├── .gitignore
+├── README.md
+├── backend/
+│   ├── main.py                    ← FastAPI entry point
+│   ├── requirements.txt
+│   ├── agent/                     ← preserved pipeline logic (READ ONLY)
+│   │   ├── prompts/               ← all LLM prompts (DO NOT MODIFY)
+│   │   ├── tools/                 ← extractors, clusterers, scorers
+│   │   └── artifacts/             ← artifact builders
+│   ├── pipeline/                  ← ingestion, normalization, scraper
+│   ├── database/
+│   │   └── schema.sql             ← reference; new schema in db/
+│   ├── db/
+│   │   └── 001_initial_schema.sql ← new PostgreSQL schema (Sprint 1)
+│   ├── core/
+│   │   ├── config.py              ← pydantic-settings
+│   │   ├── auth.py                ← Supabase JWT middleware
+│   │   └── logging.py             ← structlog setup
+│   ├── api/
+│   │   └── v1/
+│   │       ├── routes/            ← apps.py, runs.py, artifacts.py
+│   │       └── models/            ← Pydantic request/response schemas
+│   ├── services/
+│   │   ├── pipeline_service.py    ← orchestrates agent/ phases
+│   │   ├── ai_service.py          ← PRD gen + summaries via Claude
+│   │   ├── scraper_service.py     ← Play Store / App Store scraping
+│   │   └── supabase_service.py    ← all DB operations
+│   └── worker/
+│       └── tasks.py               ← Celery tasks
+├── frontend/
+│   ├── app/                       ← Next.js App Router
+│   ├── components/
+│   └── lib/
+│           api.ts                 ← typed API client
+│           types.ts               ← mirrors domain model
+├── docs/
+│   └── LEGACY_ARCHITECTURE.md
+└── legacy/                        ← reference only, never import
+```
+
+---
+
+## 12. SPRINT 1 SCOPE — build only this
+
+1. backend/db/001_initial_schema.sql — PostgreSQL schema with RLS
+2. backend/core/ — config, auth middleware, logging
+3. backend/main.py — FastAPI skeleton
+4. backend/api/v1/routes/apps.py + runs.py
+5. backend/api/v1/models/ — Pydantic schemas
+6. backend/services/pipeline_service.py — stub wrapping agent/
+7. backend/worker/tasks.py — Celery task scaffold
+8. frontend skeleton — login, dashboard, run status, results pages
+
+PRD generator, competitor comparison, trend tracking = Sprint 2.
+Do not scaffold them in Sprint 1.
+Ask before generating more than 150 lines in a single file.
